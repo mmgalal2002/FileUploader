@@ -2,35 +2,124 @@
 @using System.IO
 @using Microsoft.AspNetCore.Components.Forms
 @inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment env
+@inject IConfiguration config
 <h3>&nbsp; &nbsp;Upload files</h3>
 <p> &nbsp;&nbsp;  <InputFile OnChange="@(e=>OnInputFileChange(e))" multiple /></p>
-&nbsp;&nbsp; <button @onclick="FileUpload">Upload All</button>
+&nbsp;&nbsp; <button @onclick="FileUpload" disabled="@isUploading">@buttonText</button>
 <h2>&nbsp; &nbsp;@status</h2>
 
+@if (errors.Count > 0)
+{
+    <div style="color:red">@string.Join("\n", errors)</div>
+}
 
 @code{
-    public string status { get; set; } = "Please Select Files to Upload!";
-    IReadOnlyList<IBrowserFile> SelectedImage = Array.Empty<IBrowserFile>();
+    private string status { get; set; } = "Please Select Files to Upload!";
+    private IReadOnlyList<IBrowserFile> SelectedImage = Array.Empty<IBrowserFile>();
+
+    private bool isUploading;
+    private string buttonText => isUploading ? "Uploading..." : "Upload All";
+    private readonly List<string> errors = new();
+
     private void OnInputFileChange(InputFileChangeEventArgs e)
     {
-        SelectedImage = e.GetMultipleFiles(Int32.MaxValue);
-        status = "Ready!";
+        SelectedImage = e.GetMultipleFiles(int.MaxValue);
+        errors.Clear();
+        status = SelectedImage.Count == 0 ? "Please Select Files to Upload!" : "Ready!";
         StateHasChanged();
     }
-    public async void FileUpload()
+
+    private async Task FileUpload()
     {
-        var imagesDir = "E:\\Fayez";
-        Directory.CreateDirectory(imagesDir);
+        if (isUploading)
+            return;
+
+        if (SelectedImage is null || SelectedImage.Count == 0)
+        {
+            status = "No files selected.";
+            return;
+        }
+
+        isUploading = true;
+        errors.Clear();
+        status = "Uploading...";
+        StateHasChanged();
+
+        var imagesDir = config["Uploads:RootPath"];
+        if (string.IsNullOrWhiteSpace(imagesDir))
+            imagesDir = @"C:\UploadedFiles";
+
+        try
+        {
+            Directory.CreateDirectory(imagesDir);
+        }
+        catch (Exception ex)
+        {
+            isUploading = false;
+            status = "Upload folder could not be created.";
+            errors.Add(ex.Message);
+            StateHasChanged();
+            return;
+        }
+
+        var uploadedCount = 0;
 
         foreach (var file in SelectedImage)
         {
-            using var stream = file.OpenReadStream(Int64.MaxValue);
-            var filePath = Path.Combine(imagesDir, Path.GetFileName(file.Name));
-            using var fs = File.Create(filePath);
-            await stream.CopyToAsync(fs);
-        }
-        status = "Done!";
-        StateHasChanged();
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                const long maxFileSize = 512L * 1024 * 1024; // 512MB per file
 
+                await using var stream = file.OpenReadStream(maxFileSize, cts.Token);
+
+                var safeName = SanitizeFileName(file.Name);
+                var uniqueName = GetUniqueFileName(imagesDir, safeName);
+                var filePath = Path.Combine(imagesDir, uniqueName);
+
+                await using var fs = File.Create(filePath);
+                await stream.CopyToAsync(fs, 81920, cts.Token);
+
+                uploadedCount++;
+                status = $"Uploaded {uploadedCount} / {SelectedImage.Count}";
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{file.Name}: {ex.Message}");
+            }
+        }
+
+        isUploading = false;
+        status = errors.Count == 0 ? "Done!" : $"Done with {errors.Count} error(s).";
+        StateHasChanged();
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var name = Path.GetFileName(fileName);
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+
+        if (string.IsNullOrWhiteSpace(name))
+            name = "file";
+
+        return name;
+    }
+
+    private static string GetUniqueFileName(string directoryPath, string fileName)
+    {
+        var fullPath = Path.Combine(directoryPath, fileName);
+        if (!File.Exists(fullPath))
+            return fileName;
+
+        var baseName = Path.GetFileNameWithoutExtension(fileName);
+        var ext = Path.GetExtension(fileName);
+
+        if (baseName.Length > 80)
+            baseName = baseName[..80];
+
+        return $"{baseName}_{Guid.NewGuid():N}{ext}";
     }
 }

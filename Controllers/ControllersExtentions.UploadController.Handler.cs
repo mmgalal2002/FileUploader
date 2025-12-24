@@ -12,10 +12,10 @@ public static partial class ControllersExtentions
         if (files is null || files.Count == 0)
             return Results.BadRequest("No files received. Use form field name 'files'.");
 
-        // Configure via appsettings.json: Uploads:RootPath (e.g. C:\\Uploads)
+        // Configure via appsettings.json: Uploads:RootPath (e.g. C:\\UploadedFiles)
         var uploadRoot = config["Uploads:RootPath"];
         if (string.IsNullOrWhiteSpace(uploadRoot))
-            uploadRoot = @"C:\Uploads";
+            uploadRoot = @"C:\UploadedFiles";
 
         Directory.CreateDirectory(uploadRoot);
 
