@@ -13,18 +13,21 @@
     IReadOnlyList<IBrowserFile> SelectedImage = Array.Empty<IBrowserFile>();
     private void OnInputFileChange(InputFileChangeEventArgs e)
     {
-        SelectedImage = e.GetMultipleFiles(Int32.MaxValue); 
+        SelectedImage = e.GetMultipleFiles(Int32.MaxValue);
         status = "Ready!";
         StateHasChanged();
     }
     public async void FileUpload()
     {
-        foreach(var file in SelectedImage)
+        var imagesDir = "E:\\Fayez";
+        Directory.CreateDirectory(imagesDir);
+
+        foreach (var file in SelectedImage)
         {
-           using var stream = file.OpenReadStream(Int64.MaxValue);
-           using  var fs = File.Create($"{env.WebRootPath}\\Images\\{file.Name}");
+            using var stream = file.OpenReadStream(Int64.MaxValue);
+            var filePath = Path.Combine(imagesDir, Path.GetFileName(file.Name));
+            using var fs = File.Create(filePath);
             await stream.CopyToAsync(fs);
-            fs.Close();
         }
         status = "Done!";
         StateHasChanged();
