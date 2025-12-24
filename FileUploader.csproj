@@ -14,5 +14,8 @@
 	<ItemGroup>
     <Folder Include="wwwroot\Images\" />
   </ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.0" />
+	</ItemGroup>
 
 </Project>
